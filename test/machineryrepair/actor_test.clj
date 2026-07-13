@@ -1,0 +1,44 @@
+(ns machineryrepair.actor-test
+  (:require [clojure.test :refer [deftest is testing]]
+            [machineryrepair.actor :as actor]
+            [machineryrepair.store :as store]))
+
+(defn- fresh-store []
+  (let [st (store/mem-store)]
+    (store/register-client! st {:client-id "client-1" :name "Kobo Repair Shop"})
+    (store/register-equipment! st {:equipment-id "E-1" :client-id "client-1"
+                                   :name "tractor-diesel-pump"
+                                   :max-test-deviation-pct 2.0
+                                   :approved-parts #{"oem-injector-4471"}})
+    st))
+
+(deftest commits-an-approved-part-in-deviation-repair
+  (let [st (fresh-store)
+        graph (actor/build-graph {:store st})
+        request {:client-id "client-1" :op :approve-repair :stake :low
+                 :equipment-id "E-1" :part "oem-injector-4471" :test-deviation-pct 1.0}
+        result (actor/run-request! graph request {} "thread-1")]
+    (is (= :done (:status result)))
+    (is (some? (get-in result [:state :record])))
+    (is (= 1 (count (store/records-of st "client-1"))))))
+
+(deftest holds-an-unapproved-part-repair
+  (let [st (fresh-store)
+        graph (actor/build-graph {:store st})
+        request {:client-id "client-1" :op :approve-repair :stake :low
+                 :equipment-id "E-1" :part "generic-knockoff" :test-deviation-pct 1.0}
+        result (actor/run-request! graph request {} "thread-2")]
+    (is (= :hold (:disposition (:state result))))
+    (is (empty? (store/records-of st "client-1")))))
+
+(deftest interrupts-then-approves-lift-operation-on-human-approval
+  (let [st (fresh-store)
+        graph (actor/build-graph {:store st})
+        request {:client-id "client-1" :op :approve-lift-operation :stake :low
+                 :equipment-id "E-1"}
+        interrupted (actor/run-request! graph request {} "thread-3")]
+    (is (= :interrupted (:status interrupted)))
+    (is (empty? (store/records-of st "client-1")))
+    (let [resumed (actor/approve! graph "thread-3")]
+      (is (= :done (:status resumed)))
+      (is (= 1 (count (store/records-of st "client-1")))))))

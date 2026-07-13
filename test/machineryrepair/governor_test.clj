@@ -1,0 +1,90 @@
+(ns machineryrepair.governor-test
+  (:require [clojure.test :refer [deftest is testing]]
+            [machineryrepair.store :as store]
+            [machineryrepair.governor :as governor]))
+
+(defn- fresh-store []
+  (let [st (store/mem-store)]
+    (store/register-client! st {:client-id "client-1" :name "Kobo Repair Shop"})
+    (store/register-equipment! st {:equipment-id "E-1" :client-id "client-1"
+                                   :name "tractor-diesel-pump"
+                                   :max-test-deviation-pct 2.0
+                                   :approved-parts #{"oem-injector-4471" "oem-filter-8823"}})
+    st))
+
+(defn- repair [part deviation]
+  {:op :approve-repair :effect :propose :equipment-id "E-1"
+   :part part :test-deviation-pct deviation :confidence 0.9 :stake :low})
+
+(def ^:private req {:client-id "client-1"})
+
+(deftest ok-approved-part-within-deviation
+  (let [st (fresh-store)
+        v (governor/check req {} (repair "oem-injector-4471" 1.0) st)]
+    (is (:ok? v))))
+
+(deftest ok-at-exact-deviation-ceiling
+  (testing "deviation exactly at the ceiling is within margin"
+    (let [st (fresh-store)
+          v (governor/check req {} (repair "oem-filter-8823" 2.0) st)]
+      (is (:ok? v)))))
+
+(deftest hard-on-unapproved-part
+  (testing "counterfeit/unauthorized parts are not permitted"
+    (let [st (fresh-store)
+          v (governor/check req {} (assoc (repair "generic-knockoff" 1.0) :confidence 0.99) st)]
+      (is (:hard? v))
+      (is (some #(= :unapproved-part (:rule %)) (:violations v))))))
+
+(deftest hard-on-test-deviation-exceeds-ceiling
+  (let [st (fresh-store)
+        v (governor/check req {} (assoc (repair "oem-injector-4471" 8.0) :confidence 0.99) st)]
+    (is (:hard? v))
+    (is (some #(= :test-deviation-exceeds-ceiling (:rule %)) (:violations v)))))
+
+(deftest hard-on-unknown-equipment
+  (let [st (fresh-store)
+        v (governor/check req {} (assoc (repair "oem-injector-4471" 1.0) :equipment-id "E-ghost") st)]
+    (is (:hard? v))
+    (is (some #(= :unknown-equipment (:rule %)) (:violations v)))))
+
+(deftest hard-on-foreign-equipment
+  (let [st (fresh-store)]
+    (store/register-client! st {:client-id "client-2" :name "Other"})
+    (let [v (governor/check {:client-id "client-2"} {} (repair "oem-injector-4471" 1.0) st)]
+      (is (:hard? v))
+      (is (some #(= :equipment-wrong-client (:rule %)) (:violations v))))))
+
+(deftest hard-on-unregistered-client
+  (let [st (fresh-store)
+        v (governor/check {:client-id "nobody"} {} (repair "oem-injector-4471" 1.0) st)]
+    (is (:hard? v))
+    (is (some #(= :no-client (:rule %)) (:violations v)))))
+
+(deftest hard-on-no-actuation-violation
+  (let [st (fresh-store)
+        v (governor/check req {} (assoc (repair "oem-injector-4471" 1.0) :effect :direct-write) st)]
+    (is (:hard? v))
+    (is (some #(= :no-actuation (:rule %)) (:violations v)))))
+
+(deftest always-escalates-lift-operation-even-at-high-confidence
+  (testing "no lift operation without the governor gate"
+    (let [st (fresh-store)
+          v (governor/check req {} {:op :approve-lift-operation :effect :propose
+                                    :equipment-id "E-1" :confidence 0.99 :stake :low} st)]
+      (is (not (:hard? v)))
+      (is (:escalate? v)))))
+
+(deftest always-escalates-hydraulic-pressure-work-even-at-high-confidence
+  (testing "pressurized-hydraulic work requires human sign-off"
+    (let [st (fresh-store)
+          v (governor/check req {} {:op :approve-hydraulic-pressure-work :effect :propose
+                                    :equipment-id "E-1" :confidence 0.99 :stake :low} st)]
+      (is (not (:hard? v)))
+      (is (:escalate? v)))))
+
+(deftest escalates-low-confidence
+  (let [st (fresh-store)
+        v (governor/check req {} (assoc (repair "oem-injector-4471" 1.0) :confidence 0.3) st)]
+    (is (not (:hard? v)))
+    (is (:escalate? v))))

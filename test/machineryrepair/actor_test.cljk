@@ -1,5 +1,5 @@
 (ns machineryrepair.actor-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [machineryrepair.actor :as actor]
             [machineryrepair.store :as store]))
 

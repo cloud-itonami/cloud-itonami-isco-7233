@@ -1,0 +1,34 @@
+;; What this vertical's robot physically does, declared for
+;; kotoba.robotics.process (kotoba-lang/robotics). `kbb -M:physics` runs it.
+;;
+;; README "Robotics premise": a diagnostic and lift-assist robot for
+;; agricultural and industrial machinery mechanics (ISCO 7233) performs
+;; equipment scanning and part handling for machinery repair; operating a
+;; lift or working with hydraulic systems under pressure needs human
+;; sign-off. Its physical work: lifting heavy components (hydraulic
+;; cylinders, gearbox parts) off the machine onto the bench, and diagnosing
+;; whether a replacement hydraulic hose can carry the pump's flow.
+;;
+;; Every number without a cited source is marked `estimate` in its :basis.
+;; Replacing an estimate with a sourced value is this bot's growth work.
+{:physics/schema "itonami.physical-ai.spec.v1"
+ :repo "cloud-itonami/cloud-itonami-isco-7233"
+ :cases
+ [{:id :component-to-bench
+   :kind :manipulator
+   :procedure "lift-assist arm takes a removed hydraulic cylinder / gearbox part off the machine and sets it on the repair bench"
+   :params {:l1-m 0.80 :l2-m 0.70 :m1-kg 14.0 :m2-kg 10.0
+            :from [1.00 0.30] :to [0.50 0.90] :duration-s 3.5 :steps 700}
+   :sweep {:param :payload-kg :values [10.0 20.0 30.0 45.0 60.0]}
+   :quantity :peak-tau1-nm
+   :limit {:max 450.0 :basis "estimate: continuous shoulder torque of a ~35 kg-payload industrial lift-assist arm class"}
+   :boundary {:lo 2.0 :hi 150.0}}
+  {:id :hydraulic-hose-check
+   :kind :pipe-flow
+   :procedure "diagnose a replacement 3 m hydraulic hose of 12.7 mm bore on a tractor's implement circuit, with ISO VG 46 oil at 40 C; the pump flow is swept"
+   :params {:diameter-m 0.0127 :length-m 3.0 :roughness-m 1.5e-6
+            :density-kg-m3 870.0 :viscosity-pa-s 0.040 :pump-efficiency 0.85}
+   :sweep {:param :q-m3s :values [0.00033 0.00067 0.00100 0.00133 0.00167]}
+   :quantity :pressure-drop-pa
+   :limit {:max 500000.0 :basis "estimate: a hose should lose no more than ~5 bar of a ~180 bar circuit at rated flow; viscosity 0.040 Pa s is 46 cSt x 870 kg/m3 for VG 46 at 40 C"}
+   :boundary {:lo 0.0001 :hi 0.004}}]}

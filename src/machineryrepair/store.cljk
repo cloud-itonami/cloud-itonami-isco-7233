@@ -1,7 +1,7 @@
 (ns machineryrepair.store
   "SSoT for the ISCO-08 7233 independent farm & industrial machinery
   repair practice actor (itonami actor pattern, ADR-2607011000 /
-  CLAUDE.md Actors section; README's 'Robotics premise' — a
+  AGENTS.md Actors section; README's 'Robotics premise' — a
   diagnostic and lift-assist robot performs equipment scanning and
   part-handling under this advisor/governor pair, which never
   dispatches hardware itself). Modeled on cloud-itonami-isco-4311's

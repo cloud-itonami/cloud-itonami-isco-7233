@@ -1,6 +1,6 @@
 (ns machineryrepair.actor
   "MachineryRepairPracticeActor — the ISCO-08 7233 community machineryrepair actor as a
-  `langgraph.graph/state-graph` (ADR-2607011000 / CLAUDE.md Actors
+  `langgraph.graph/state-graph` (ADR-2607011000 / AGENTS.md Actors
   section). One graph run = one machineryrepair operation request
   (intake → advise → govern → decide → commit/hold, with a
   human-approval interrupt for escalated proposals). No infinite
